@@ -1,30 +1,62 @@
 # amazon-item-weight-fetcher
 Amazon PA-API v5 (Product Advertising API) を使用して、ASIN または商品URLから商品重量・寸法・商品情報をオンデマンドで取得するローカルツールです。
 
-CLI（コマンドライン）および GUI（デスクトップアプリ）の両方に対応しており、Gemini 等の AI エージェントからの自動呼び出しにも対応します。
+CLI（コマンドライン）および GUI（デスクトップアプリ）の両方に対応し、Gemini 等の AI エージェントからの自動呼び出しに対応します。
 
 ---
 
-## 主な機能
+## 開発憲法（アーキテクチャ方針）
 
-- **オンデマンド重量取得**: ASIN または Amazon 商品URL を指定して重量（PackageWeight / ItemWeight）を取得
-- **二重インターフェース**:
-  - **CLI / スクリプト**: Gemini や自動化スクリプトから呼び出しやすいコマンドライン操作、JSON/CSV 出力
-  - **GUI アプリ**: Windows 環境で手軽に操作できる Tkinter 製デスクトップ画面
-- **CSV 一括処理**: 複数 ASIN の一括重量取得
-- **AWS Signature v4 準拠**: 公式の PA-API v5 署名プロトコルによる安全なリクエスト
+- **1ファイル1責務（Single Responsibility Principle）**: 責務ごとにモジュールを明確に分割
+- **命名規則**: `カテゴリ名_機能名.py` 形式（例: `auth_aws_signer.py`, `service_weight_fetcher.py`）
+- **自己文書化**: 全てのファイル先頭に【設計メモ】（責務、入出力、依存関係）と実コードを同梱
 
 ---
 
-## 動作環境・前提条件
+## ファイル構成と役割（1ファイル1責務）
 
-- **OS**: Windows 10 / 11
-- **Python**: 3.10 以上 (Python 3.13 動作確認済み)
-- **Amazon アソシエイト・PA-API 認証情報**:
-  - `Access Key ID`
-  - `Secret Access Key`
-  - `Partner Tag` (アソシエイトタグ、例: `xxxx-22`)
-  - ※ PA-API は AWS 認証（Signature Version 4）を使用します。
+| ファイル名 | カテゴリ | 責務・役割 |
+|---|---|---|
+| `auth_aws_signer.py` | auth | AWS Signature Version 4 (SigV4) 暗号署名計算・派生キー導出 |
+| `config_settings.py` | config | .env / 環境変数の読み込み、永続化保存、設定バリデーション |
+| `parser_asin.py` | parser | URL または テキストからの ASIN（10桁英数字）正規化抽出 |
+| `parser_weight.py` | parser | PA-APIレスポンスから重量（本体/梱包）・商品名等の正規化抽出 |
+| `api_amazon_client.py` | api | PA-API v5 エンドポイントへの署名付き HTTP リクエスト発行 |
+| `service_weight_fetcher.py`| service | バッチ分割（最大10件/回）・エラー補正・ビジネスロジック統括 |
+| `storage_csv.py` | storage | CSV / テキストファイルの読み込みおよび結果 CSV 保存 |
+| `cli_runner.py` | cli | コマンドライン実行・JSON出力 (Gemini 呼び出し用) |
+| `gui_app.py` | gui | Tkinter によるデスクトップ GUI 画面表示・イベント処理 |
+| `run_gui.bat` | script | Windows 用 GUI ワンクリック起動バッチファイル |
+
+---
+
+## 使い方
+
+### 1. CLI（Gemini / コマンドラインからの実行）
+
+単一 ASIN の重量取得:
+```bash
+python cli_runner.py --asin B08N5WRWNW
+```
+
+JSON 形式で出力（AI や他プログラムとの連携用）:
+```bash
+python cli_runner.py --asin B08N5WRWNW --format json
+```
+
+CSV からの一括取得:
+```bash
+python cli_runner.py --input asins.csv --output results.csv
+```
+
+### 2. GUI（デスクトップ画面）
+
+GUI を起動します:
+```bash
+python gui_app.py
+```
+または `run_gui.bat` をダブルクリックして起動できます。
+画面上の「API認証設定」から直接アクセスキー等を保存可能です。
 
 ---
 
@@ -42,60 +74,10 @@ CLI（コマンドライン）および GUI（デスクトップアプリ）の�
    ```
 
 3. **環境設定**:
-   `.env.example` をコピーして `.env` を作成し、Amazon の認証情報を記入します。
+   `.env.example` をコピーして `.env` を作成し、Amazon の認証情報を記入します（GUI画面からの入力保存も可能です）。
    ```bash
    cp .env.example .env
    ```
-   `.env` 内の設定例:
-   ```env
-   AMAZON_ACCESS_KEY=your_access_key_here
-   AMAZON_SECRET_KEY=your_secret_key_here
-   AMAZON_PARTNER_TAG=your_partner_tag-22
-   AMAZON_MARKETPLACE=www.amazon.co.jp
-   ```
-
----
-
-## 使い方
-
-### 1. CLI（Gemini / コマンドラインからの実行）
-
-単一 ASIN の重量取得:
-```bash
-python get_weight.py --asin B08N5WRWNW
-```
-
-JSON 形式で出力（AI や他プログラムとの連携用）:
-```bash
-python get_weight.py --asin B08N5WRWNW --format json
-```
-
-CSV からの一括取得:
-```bash
-python get_weight.py --input asins.csv --output results.csv
-```
-
-### 2. GUI（デスクトップ画面）
-
-GUI を起動します:
-```bash
-python app_gui.py
-```
-または `run_gui.bat` をダブルクリックして起動できます。
-
----
-
-## ディレクトリ構成
-
-```text
-├── README.md            # 本ドキュメント
-├── .gitignore           # Git 除外設定 (.env やキャッシュ等)
-├── .env.example         # 環境変数テンプレート
-├── requirements.txt     # 必要パッケージ一覧
-├── amazon_paapi.py      # PA-API v5 署名 & 通信コアモジュール
-├── get_weight.py        # CLI 実行スクリプト (Gemini 連携対応)
-└── app_gui.py           # Tkinter デスクトップ GUI アプリ
-```
 
 ---
 
