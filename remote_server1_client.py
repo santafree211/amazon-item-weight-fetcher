@@ -73,15 +73,17 @@ class RemoteServer1Client:
         重量が未取得のASINリストをサーバー1から抽出して返却。
         item_weights に未登録の asins を取得。
         """
+        # asins テーブル全体(66万件)ではなく、巡回対象である purchase_targets (約6万件) を対象とする
+        # 読み取りロック競合を避けるため read-only URI を使用
         limit_clause = f"LIMIT {limit}" if limit else ""
         sql = f"""
-        SELECT a.asin
-        FROM asins a
-        LEFT JOIN item_weights w ON a.asin = w.asin
+        SELECT p.asin
+        FROM purchase_targets p
+        LEFT JOIN item_weights w ON p.asin = w.asin
         WHERE w.asin IS NULL
         {limit_clause};
         """
-        bash_cmd = f"sqlite3 -cmd '.timeout 10000' {self.db_path} \"{sql}\""
+        bash_cmd = f"sqlite3 -cmd '.timeout 10000' file:{self.db_path}?mode=ro \"{sql}\""
         res = self.run_ssh_command(bash_cmd, timeout=60)
         if res.returncode != 0:
             raise RuntimeError(f"ASIN取得失敗: {res.stderr}")
