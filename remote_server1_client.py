@@ -36,7 +36,7 @@ class RemoteServer1Client:
         self.db_path = db_path
 
     def run_ssh_command(self, bash_cmd: str, timeout: int = 30) -> subprocess.CompletedProcess:
-        """SSH経由で任意のBashコマンドを実行"""
+        """SSH経由で任意のBashコマンドを実行（Windows cp932 エンコード問題を回避するため utf-8 / errors=replace 指定）"""
         cmd = [
             "ssh",
             "-i", self.key_path,
@@ -45,7 +45,15 @@ class RemoteServer1Client:
             f"{self.user}@{self.host}",
             bash_cmd,
         ]
-        return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        p = subprocess.run(cmd, capture_output=True, timeout=timeout)
+        stdout_str = p.stdout.decode("utf-8", errors="replace")
+        stderr_str = p.stderr.decode("utf-8", errors="replace")
+        return subprocess.CompletedProcess(
+            args=cmd,
+            returncode=p.returncode,
+            stdout=stdout_str,
+            stderr=stderr_str,
+        )
 
     def init_weight_table(self) -> None:
         """サーバー1上のDBマスターに重量管理用テーブル (item_weights) を作成"""
